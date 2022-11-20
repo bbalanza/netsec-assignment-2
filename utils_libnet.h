@@ -57,7 +57,7 @@ IPv4Options makeIPv4TCPOptions(uint32_t source, uint32_t destination,
 TCPOptions makeTCPOptions(uint16_t sourcePort, uint16_t destinationPort,
                           uint32_t sequenceNumber,
                           uint32_t acknowledgementNumber, uint8_t control,
-                          char *payload, uint32_t payloadLength, Libnet libnet,
+                          uint32_t payloadLength, Libnet libnet,
                           libnet_ptag_t ptag) {
   TCPOptions options;
   options.sourcePort = sourcePort;
@@ -69,8 +69,8 @@ TCPOptions makeTCPOptions(uint16_t sourcePort, uint16_t destinationPort,
   options.checksum = 0;
   options.urgentPointer = 0;
   options.packetLength = LIBNET_TCP_H + payloadLength;
-  options.payload = (uint8_t *)payload;
-  options.payloadLength = payloadLength;
+  options.payload = NULL;
+  options.payloadLength = 0;
   options.libnet = libnet;
   options.ptag = ptag;
   return options;
@@ -103,8 +103,8 @@ IPAddresses makeIPAddresses(char *source, char *destination) {
   return addresses;
 }
 
-PayloadOptions makePacketPayloadOptions(char *payload, uint32_t payloadLength,
-                                        Libnet libnet, libnet_ptag_t ptag) {
+PayloadOptions makePayloadOptions(char *payload, uint32_t payloadLength,
+                                  Libnet libnet, libnet_ptag_t ptag) {
   PayloadOptions options;
   options.payload = payload;
   options.payloadLength = payloadLength;
