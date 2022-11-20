@@ -1,11 +1,11 @@
 .PHONY: all compile link clean
 
 SOURCE_NAME := attack
-COMPILER_FLAGS := 
-LIBRARIES := 
+COMPILER_FLAGS := -Wall -Wextra -pedantic -Wshadow 
+LIBRARIES := -lnet
 DEBUG := -g
 
-all: ${SOURCE_NAME} compile link clean
+all: ${SOURCE_NAME}.c compile link clean
 
 compile: 
 	@echo "Compiling..."
