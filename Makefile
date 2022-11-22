@@ -2,7 +2,7 @@
 
 SOURCE_NAME := attack
 COMPILER_FLAGS := -Wall -Wextra -pedantic -Wshadow 
-LIBRARIES := -lnet
+LIBRARIES := -lnet -lpcap
 DEBUG := -g
 
 all: ${SOURCE_NAME}.c compile link clean

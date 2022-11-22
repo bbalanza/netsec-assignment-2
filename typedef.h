@@ -52,3 +52,16 @@ typedef struct {
   Libnet libnet;
   libnet_ptag_t ptag;
 } PayloadOptions;
+
+typedef struct {
+  char *errorBuffer;
+  pcap_t *handle;
+  bpf_u_int32 netMask;
+  bpf_u_int32 deviceIP;
+} Pcap;
+
+typedef struct {
+  struct ethhdr *ethernet;
+  struct iphdr *ip;
+  struct tcphdr *tcp;
+} Packet;
