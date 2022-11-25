@@ -91,16 +91,22 @@ uint32_t calculateISN() {
     pcap_next_ex(pcap.handle, &header, &data);
     Packet packet = makePacket(data);
     isn = byteToUint32littleEndian(packet.tcp->th_seq);
+    difference = prevIsn - isn;
+    differenceSquared = prevDifference - difference;
+    printf("ISN: %u, Previous ISN: %u\n"
+           "Difference: %u, Previous Difference: %u\n"
+           "DifferenceSquared: %d, Previous Difference Squared: %d\n"
+           "----------------------------\n",
+           isn, prevIsn, difference, prevDifference, differenceSquared,
+           prevDifferenceSquare);
     if (prevIsn == 0) {
       prevIsn = isn;
       continue;
     }
-    difference = prevIsn - isn;
     if (prevDifference == 0) {
       prevDifference = difference;
       continue;
     }
-    differenceSquared = prevDifference - difference;
     if (prevDifferenceSquare == 0) {
       prevDifferenceSquare = differenceSquared;
       continue;
