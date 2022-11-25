@@ -3,4 +3,14 @@ j.b.balanzamartinez@student.vu.nl
 jbz290
 2720850
 
-Description
+(1) First, the attack disables the server. Secondly, it predicts the ISN that the xterminal will use in the next TCP handshake. Thirdly, it initiates a TCP connection (posing as server) with xterminal, and issues a command to the rshd server appending the string "+ +" to the .rhosts file. Finally, it enables the server.
+
+(2) The ISN generating algorithm works as follows:
+	The kernel generates a random ISN after a certain amount of time.
+	For every new connection thereafter the kernel decrements the ISN by various amounts. The first few (around 6) do not have importance.
+	After xterminal has generated enough ISNs to calculate the difference of the difference between the current ISN and the previous ISN, either or happens:
+		The ISN is decremented by a random amount every time i.e. ISN - rand -> ISN - rand -> ISN - rand.
+		The ISN is decremented by a random amount, D, once and then by D minus 1337 i.e. ISN - D -> ISN - D - 1337 -> ISN - D - 1337.
+Once the ISN decriment pattern appears, one can predict the next ISN once the first difference of the difference between ISNs is 1337.
+
+(3) The trivial steps to cover one's tracks would be to remove the "+ +" string from the .rhosts file, and remove the .bash_history and .viminfo entries made by the attacker (if any), and enabling the server again. The attacker could try and check if rshd is logging successful accesses via syslogd and remove them.  For example, by running ps aux grep we can see that xterminal is running rsyslogd, and by checking the configuration in /etc/rsyslog.conf we can see that user sessions are being logged to the /var/log/user.log file. Another thing the attacker could do is to check whether a firewall is recording the session (the way irl Tsutomu's collegue figured out there was an attack), and remove those log files. However, the attacker would need root privileges to complete these two steps.
